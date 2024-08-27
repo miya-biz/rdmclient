@@ -281,28 +281,7 @@ def list_(args):
         prefix = store.name
         if base_provider is not None and base_provider != prefix:
             continue
-        files = store.files if path_filter is None \
-                else store.matched_files(path_filter)
-        for file_ in files:
-            path = file_.path
-            if path.startswith('/'):
-                path = path[1:]
-            full_path = os.path.join(prefix, path)
-            if args.long_format:
-                if file_.date_modified is not None:
-                    modified = dateutil.parser.parse(file_.date_modified)
-                    modified = modified.astimezone(get_localzone())
-                    smodified = modified.strftime('%Y-%m-%d %H:%M:%S')
-                else:
-                    smodified = '- -'
-                if file_.size is not None:
-                    sfsize = str(file_.size)
-                else:
-                    sfsize = '-'
-                print('%s %s %s' % (smodified, sfsize, full_path))
-            else:
-                print(full_path)
-
+        _list_folder(store, path_filter, prefix, args.long_format)
 
 @might_need_auth
 def upload(args):
@@ -472,6 +451,30 @@ def move(args):
                       to_foldername=target_filename, force=args.force)
             return
 
+def _list_folder(store, path_filter, prefix, long_format):
+    files = store.files if path_filter is None \
+            else store.matched_files(path_filter)
+    for file_ in files:
+        path = file_.path
+        if path.startswith('/'):
+            path = path[1:]
+        full_path = os.path.join(prefix, path)
+        if long_format:
+            if file_.date_modified is not None:
+                modified = dateutil.parser.parse(file_.date_modified)
+                modified = modified.astimezone(get_localzone())
+                smodified = modified.strftime('%Y-%m-%d %H:%M:%S')
+            else:
+                smodified = '- -'
+            if file_.size is not None:
+                sfsize = str(file_.size)
+            else:
+                sfsize = '-'
+            print('%s %s %s' % (smodified, sfsize, full_path))
+        else:
+            print(full_path)
+    for folder_ in store.folders:
+        _list_folder(folder_, path_filter, prefix, long_format)
 
 def _ensure_folder(store, path):
     folder = None
