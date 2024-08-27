@@ -171,6 +171,11 @@ class ContainerMixin:
     def folders(self):
         """Iterate over top-level folders in this folder."""
         return self._iter_children(self._files_url, 'folder', Folder)
+    
+    def matched_files(self, target_filter):
+        """Iterate all matched files in this storage."""
+        return self._iter_children(self._files_url, 'file', File,
+                                   None, target_filter)
 
     def create_folder(self, name, exist_ok=False):
         url = self._new_folder_url
