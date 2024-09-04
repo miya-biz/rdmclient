@@ -128,3 +128,16 @@ def is_path_matched(target_file_path, fileobj):
             if file_path_seg != target_file_path_seg:
                 return False
     return True
+
+def flatten_files(store, path_filter = None):
+    files = store.files if path_filter is None \
+            else store.matched_files(path_filter)
+    for file_ in files:
+        yield file_
+    for folder_ in store.folders:
+        yield from flatten_files(folder_, path_filter)
+
+def flatten_folders(store):
+    for folder_ in store.folders:
+        yield folder_
+        yield from flatten_folders(folder_)

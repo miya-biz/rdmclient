@@ -18,7 +18,7 @@ from tzlocal import get_localzone
 
 from .api import OSF
 from .exceptions import UnauthorizedException
-from .utils import norm_remote_path, split_storage, makedirs, checksum, is_path_matched
+from .utils import norm_remote_path, split_storage, makedirs, checksum, is_path_matched, flatten_files, flatten_folders
 
 
 def config_from_file():
@@ -178,7 +178,7 @@ def clone(args):
         for store in project.storages:
             prefix = os.path.join(output_dir, store.name)
 
-            for file_ in store.files:
+            for file_ in flatten_files(store):
                 path = file_.path
                 if path.startswith('/'):
                     path = path[1:]
@@ -240,9 +240,7 @@ def fetch(args):
         path_filter = None
 
     store = project.storage(storage)
-    files = store.files if path_filter is None \
-            else store.matched_files(path_filter)
-    for file_ in files:
+    for file_ in flatten_files(store, path_filter):
         if norm_remote_path(file_.path) == remote_path:
             if local_path_exists and not args.force and args.update:
                 if file_.hashes.get('md5') == checksum(local_path):
@@ -281,7 +279,25 @@ def list_(args):
         prefix = store.name
         if base_provider is not None and base_provider != prefix:
             continue
-        _list_folder(store, path_filter, prefix, args.long_format)
+        for file_ in flatten_files(store, path_filter):
+            path = file_.path
+            if path.startswith('/'):
+                path = path[1:]
+            full_path = os.path.join(prefix, path)
+            if args.long_format:
+                if file_.date_modified is not None:
+                    modified = dateutil.parser.parse(file_.date_modified)
+                    modified = modified.astimezone(get_localzone())
+                    smodified = modified.strftime('%Y-%m-%d %H:%M:%S')
+                else:
+                    smodified = '- -'
+                if file_.size is not None:
+                    sfsize = str(file_.size)
+                else:
+                    sfsize = '-'
+                print('%s %s %s' % (smodified, sfsize, full_path))
+            else:
+                print(full_path)
 
 @might_need_auth
 def upload(args):
@@ -357,7 +373,7 @@ def makefolder(args):
 
     store = project.storage(storage)
     folders = []
-    for f in store.folders:
+    for f in flatten_folders(store):
         if remote_path.startswith(norm_remote_path(f.path) + os.path.sep):
             folders.append(f)
     if len(folders) == 0:
@@ -390,11 +406,11 @@ def remove(args):
     storage, remote_path = split_storage(args.target)
 
     store = project.storage(storage)
-    for f in store.files:
+    for f in flatten_files(store):
         if norm_remote_path(f.path) == remote_path:
             f.remove()
             return
-    for f in store.folders:
+    for f in flatten_folders(store):
         if norm_remote_path(f.path) == remote_path:
             f.remove()
             return
@@ -440,45 +456,20 @@ def move(args):
     storage, remote_path = split_storage(args.source)
 
     store = project.storage(storage)
-    for f in store.files:
+    for f in flatten_files(store):
         if norm_remote_path(f.path) == remote_path:
             f.move_to(target_storage, target_folder,
                       to_filename=target_filename, force=args.force)
             return
-    for f in store.folders:
+    for f in flatten_folders(store):
         if norm_remote_path(f.path) == remote_path:
             f.move_to(target_storage, target_folder,
                       to_foldername=target_filename, force=args.force)
             return
 
-def _list_folder(store, path_filter, prefix, long_format):
-    files = store.files if path_filter is None \
-            else store.matched_files(path_filter)
-    for file_ in files:
-        path = file_.path
-        if path.startswith('/'):
-            path = path[1:]
-        full_path = os.path.join(prefix, path)
-        if long_format:
-            if file_.date_modified is not None:
-                modified = dateutil.parser.parse(file_.date_modified)
-                modified = modified.astimezone(get_localzone())
-                smodified = modified.strftime('%Y-%m-%d %H:%M:%S')
-            else:
-                smodified = '- -'
-            if file_.size is not None:
-                sfsize = str(file_.size)
-            else:
-                sfsize = '-'
-            print('%s %s %s' % (smodified, sfsize, full_path))
-        else:
-            print(full_path)
-    for folder_ in store.folders:
-        _list_folder(folder_, path_filter, prefix, long_format)
-
 def _ensure_folder(store, path):
     folder = None
-    for f in store.folders:
+    for f in flatten_folders(store):
         if norm_remote_path(f.path) == path:
             folder = f
     if folder is not None:
