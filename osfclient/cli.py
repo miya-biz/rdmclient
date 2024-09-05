@@ -18,7 +18,7 @@ from tzlocal import get_localzone
 
 from .api import OSF
 from .exceptions import UnauthorizedException
-from .utils import norm_remote_path, split_storage, makedirs, checksum, is_path_matched, flatten_files, flatten_folders
+from .utils import norm_remote_path, split_storage, makedirs, checksum, is_folder, flatten, find_parent_folder, find_by_path, filter_by_path_pattern
 
 
 def config_from_file():
@@ -178,7 +178,9 @@ def clone(args):
         for store in project.storages:
             prefix = os.path.join(output_dir, store.name)
 
-            for file_ in flatten_files(store):
+            for file_ in flatten(store):
+                if is_folder(file_):
+                    continue
                 path = file_.path
                 if path.startswith('/'):
                     path = path[1:]
@@ -228,6 +230,7 @@ def fetch(args):
 
     osf = _setup_osf(args)
     project = osf.project(args.project)
+    base_file_path = None
     if args.base_path is not None:
         base_path = args.base_path
         if base_path.startswith('/'):
@@ -235,23 +238,31 @@ def fetch(args):
         base_file_path = base_path[base_path.index('/'):]
         if not base_file_path.endswith('/'):
             base_file_path = base_file_path + '/'
-        path_filter = lambda f: is_path_matched(base_file_path, f)
-    else:
-        path_filter = None
 
     store = project.storage(storage)
-    for file_ in flatten_files(store, path_filter):
-        if norm_remote_path(file_.path) == remote_path:
-            if local_path_exists and not args.force and args.update:
-                if file_.hashes.get('md5') == checksum(local_path):
-                    print("Local file %s already matches remote." % local_path)
-                    break
+    # only fetching one file so we are done
+    file_ = find_by_path(store, remote_path)
+    if file_ is not None and not is_folder(file_):
+        is_break = False
+        if local_path_exists and not args.force and args.update:
+            if file_.hashes.get('md5') == checksum(local_path):
+                print("Local file %s already matches remote." % local_path)
+                is_break = True
+        if not is_break:
             with open(local_path, 'wb') as fp:
                 file_.write_to(fp)
 
-            # only fetching one file so we are done
-            break
+    # for file_ in flatten_files(store, path_filter):
+    #     if norm_remote_path(file_.path) == remote_path:
+    #         if local_path_exists and not args.force and args.update:
+    #             if file_.hashes.get('md5') == checksum(local_path):
+    #                 print("Local file %s already matches remote." % local_path)
+    #                 break
+    #         with open(local_path, 'wb') as fp:
+    #             file_.write_to(fp)
 
+    #         # only fetching one file so we are done
+    #         break
 
 @might_need_auth
 def list_(args):
@@ -262,6 +273,7 @@ def list_(args):
     osf = _setup_osf(args)
 
     project = osf.project(args.project)
+    base_file_path = None
     if args.base_path is not None:
         base_path = args.base_path
         if base_path.startswith('/'):
@@ -270,16 +282,17 @@ def list_(args):
         if not base_file_path.endswith('/'):
             base_file_path = base_file_path + '/'
         base_provider = base_path.split('/')[0]
-        path_filter = lambda f: is_path_matched(base_file_path, f)
     else:
         base_provider = None
-        path_filter = None
 
     for store in project.storages:
         prefix = store.name
         if base_provider is not None and base_provider != prefix:
             continue
-        for file_ in flatten_files(store, path_filter):
+        files = filter_by_path_pattern(store, base_file_path)
+        for file_ in files:
+            if is_folder(file_):
+                continue
             path = file_.path
             if path.startswith('/'):
                 path = path[1:]
@@ -372,16 +385,12 @@ def makefolder(args):
     storage, remote_path = split_storage(args.target)
 
     store = project.storage(storage)
-    folders = []
-    for f in flatten_folders(store):
-        if remote_path.startswith(norm_remote_path(f.path) + os.path.sep):
-            folders.append(f)
-    if len(folders) == 0:
+    f = find_parent_folder(store, remote_path)
+    if f is None:
         parent = store
         parent_path_segments = []
     else:
-        folders = sorted(folders, key=lambda f: len(norm_remote_path(f.path)))
-        parent = folders[-1]
+        parent = f
         parent_path_segments = norm_remote_path(parent.path).split(os.path.sep)
     remote_path_segments = remote_path.split(os.path.sep)
     for foldername in remote_path_segments[len(parent_path_segments):]:
@@ -406,15 +415,10 @@ def remove(args):
     storage, remote_path = split_storage(args.target)
 
     store = project.storage(storage)
-    for f in flatten_files(store):
-        if norm_remote_path(f.path) == remote_path:
-            f.remove()
-            return
-    for f in flatten_folders(store):
-        if norm_remote_path(f.path) == remote_path:
-            f.remove()
-            return
-
+    f = find_by_path(store, remote_path)
+    if f is None:
+        sys.exit('No files found to remove.')
+    f.remove()
 
 @might_need_auth
 def move(args):
@@ -456,22 +460,18 @@ def move(args):
     storage, remote_path = split_storage(args.source)
 
     store = project.storage(storage)
-    for f in flatten_files(store):
-        if norm_remote_path(f.path) == remote_path:
-            f.move_to(target_storage, target_folder,
-                      to_filename=target_filename, force=args.force)
-            return
-    for f in flatten_folders(store):
-        if norm_remote_path(f.path) == remote_path:
-            f.move_to(target_storage, target_folder,
-                      to_foldername=target_filename, force=args.force)
-            return
+    f = find_by_path(store, remote_path)
+    if f is None:
+        sys.exit('No files found to move.')
+    if is_folder(f):
+        f.move_to(target_storage, target_folder,
+                  to_foldername=target_filename, force=args.force)
+    else:
+        f.move_to(target_storage, target_folder,
+                  to_filename=target_filename, force=args.force)
 
 def _ensure_folder(store, path):
-    folder = None
-    for f in flatten_folders(store):
-        if norm_remote_path(f.path) == path:
-            folder = f
+    folder = find_by_path(store, path)
     if folder is not None:
         return folder
     if '/' in path:

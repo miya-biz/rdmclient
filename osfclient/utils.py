@@ -101,9 +101,7 @@ def get_local_file_size(fp):
     # https://stackoverflow.com/a/283719/2680824
     return os.fstat(fp.fileno()).st_size
 
-
-def is_path_matched(target_file_path, fileobj):
-    file_path = fileobj['attributes']['materialized_path']
+def _is_path_matched(target_file_path, file_path):
     if target_file_path is None:
         return True
     file_path_segs = file_path.split('/')
@@ -129,15 +127,94 @@ def is_path_matched(target_file_path, fileobj):
                 return False
     return True
 
-def flatten_files(store, path_filter = None):
-    files = store.files if path_filter is None \
-            else store.matched_files(path_filter)
+def is_folder(file_or_folder):
+    return hasattr(file_or_folder, 'files')
+
+def flatten(store):
+    files = store.files
     for file_ in files:
         yield file_
     for folder_ in store.folders:
-        yield from flatten_files(folder_, path_filter)
-
-def flatten_folders(store):
-    for folder_ in store.folders:
         yield folder_
-        yield from flatten_folders(folder_)
+        yield from flatten(folder_)
+
+def find_parent_folder(store, target_file_path):
+    file_path_segs = target_file_path.split('/')
+    if(len(file_path_segs) <= 1):
+        return None
+    folder = store
+    path = ''
+    for i in range(len(file_path_segs) - 1):
+        path += file_path_segs[i]
+        is_found = False
+        for folder_ in folder.folders:
+            if norm_remote_path(folder_.path) == path:
+                folder = folder_
+                is_found = True
+                break
+        if not is_found:
+            break
+        path += '/'
+    return folder
+
+def find_by_path(store, target_file_path):
+    if target_file_path is None:
+        return None
+    file_path_segs = target_file_path.split('/')
+    if(len(file_path_segs) == 1):
+        for file_ in store.files:
+            if norm_remote_path(file_.path) == target_file_path:
+                return file_
+        for folder_ in store.folders:
+            if norm_remote_path(folder_.path) == target_file_path:
+                return folder_
+        return None
+    else:
+        parent_target_file_path = '/'.join(file_path_segs[:-1])
+        parent_result = find_by_path(store, parent_target_file_path)
+        if parent_result is None:
+            return None
+        else:
+            if is_folder(parent_result):
+                for file_ in parent_result.files:
+                    if norm_remote_path(file_.path) == target_file_path:
+                        return file_
+                for folder_ in parent_result.folders:
+                    if norm_remote_path(folder_.path) == target_file_path:
+                        return folder_
+            return None
+
+def filter_by_path_pattern(store, target_file_path):
+    yield from _filter_by_path_pattern(store, target_file_path, 0)
+
+def _filter_by_path_pattern(store, target_file_path, depth):
+    if target_file_path is None or target_file_path == '/':
+        yield from flatten(store)
+        return
+    file_path_segs = target_file_path.split('/')
+    if file_path_segs[0] == '':
+        file_path_segs = file_path_segs[1:]
+    if file_path_segs[-1] == '':
+        file_path_segs = file_path_segs[:-1]
+    if(len(file_path_segs) == 1):
+        for file_ in store.files:
+            if _is_path_matched(target_file_path, file_.path):
+                yield file_
+        for folder_ in store.folders:
+            if _is_path_matched(target_file_path, folder_.path):
+                yield folder_
+                if depth == 0:
+                    yield from flatten(folder_)
+    else:
+        parent_target_file_path = '/' + '/'.join(file_path_segs[:-1]) + '/'
+        parent_result = _filter_by_path_pattern(store, parent_target_file_path, depth + 1)
+        for rf_ in parent_result:
+            if is_folder(rf_):
+                for file_ in rf_.files:
+                    if _is_path_matched(target_file_path, file_.path):
+                        yield file_
+                for folder_ in rf_.folders:
+                    if _is_path_matched(target_file_path, folder_.path):
+                        yield folder_
+                        if depth == 0:
+                            yield from flatten(folder_)
