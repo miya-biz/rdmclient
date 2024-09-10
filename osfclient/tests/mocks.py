@@ -1,5 +1,5 @@
 from mock import MagicMock, PropertyMock
-from ..utils import norm_remote_path, is_path_matched
+from ..utils import norm_remote_path
 
 
 # When using a PropertyMock store it as an attribute
