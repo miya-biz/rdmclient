@@ -101,6 +101,7 @@ def get_local_file_size(fp):
     # https://stackoverflow.com/a/283719/2680824
     return os.fstat(fp.fileno()).st_size
 
+
 def _is_path_matched(target_file_path, file_path):
     if target_file_path is None:
         return True
@@ -127,8 +128,10 @@ def _is_path_matched(target_file_path, file_path):
                 return False
     return True
 
+
 def is_folder(file_or_folder):
     return hasattr(file_or_folder, 'files')
+
 
 def flatten(store):
     files = store.files
@@ -138,7 +141,8 @@ def flatten(store):
         yield folder_
         yield from flatten(folder_)
 
-def find_parent_folder(store, target_file_path):
+
+def find_ancestral_folder(store, target_file_path):
     file_path_segs = target_file_path.split('/')
     if(len(file_path_segs) <= 1):
         return None
@@ -156,6 +160,7 @@ def find_parent_folder(store, target_file_path):
             break
         path += '/'
     return folder
+
 
 def find_by_path(store, target_file_path):
     if target_file_path is None:
@@ -184,8 +189,10 @@ def find_by_path(store, target_file_path):
                         return folder_
             return None
 
+
 def filter_by_path_pattern(store, target_file_path):
     yield from _filter_by_path_pattern(store, target_file_path, 0)
+
 
 def _filter_by_path_pattern(store, target_file_path, depth):
     if target_file_path is None or target_file_path == '/':

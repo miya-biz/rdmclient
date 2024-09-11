@@ -54,11 +54,6 @@ class Storage(OSFCore, ContainerMixin):
         """Iterate over all folders in this storage."""
         return self._iter_children(self._files_url, 'folder', Folder)
 
-    def matched_files(self, target_filter):
-        """Iterate all matched files in this storage."""
-        return self._iter_children(self._files_url, 'file', File,
-                                   None, target_filter)
-
     def create_file(self, path, fp, force=False, update=False):
         """Store a new file at `path` in this storage.
 

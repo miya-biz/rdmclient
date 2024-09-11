@@ -18,7 +18,7 @@ from tzlocal import get_localzone
 
 from .api import OSF
 from .exceptions import UnauthorizedException
-from .utils import norm_remote_path, split_storage, makedirs, checksum, is_folder, flatten, find_parent_folder, find_by_path, filter_by_path_pattern
+from .utils import norm_remote_path, split_storage, makedirs, checksum, is_folder, flatten, find_ancestral_folder, find_by_path, filter_by_path_pattern
 
 
 def config_from_file():
@@ -230,39 +230,19 @@ def fetch(args):
 
     osf = _setup_osf(args)
     project = osf.project(args.project)
-    base_file_path = None
-    if args.base_path is not None:
-        base_path = args.base_path
-        if base_path.startswith('/'):
-            base_path = base_path[1:]
-        base_file_path = base_path[base_path.index('/'):]
-        if not base_file_path.endswith('/'):
-            base_file_path = base_file_path + '/'
 
     store = project.storage(storage)
     # only fetching one file so we are done
     file_ = find_by_path(store, remote_path)
-    if file_ is not None and not is_folder(file_):
-        is_break = False
-        if local_path_exists and not args.force and args.update:
-            if file_.hashes.get('md5') == checksum(local_path):
-                print("Local file %s already matches remote." % local_path)
-                is_break = True
-        if not is_break:
-            with open(local_path, 'wb') as fp:
-                file_.write_to(fp)
+    if file_ is None or is_folder(file_):
+        return
+    if local_path_exists and not args.force and args.update:
+        if file_.hashes.get('md5') == checksum(local_path):
+            print("Local file %s already matches remote." % local_path)
+            return
+    with open(local_path, 'wb') as fp:
+        file_.write_to(fp)
 
-    # for file_ in flatten_files(store, path_filter):
-    #     if norm_remote_path(file_.path) == remote_path:
-    #         if local_path_exists and not args.force and args.update:
-    #             if file_.hashes.get('md5') == checksum(local_path):
-    #                 print("Local file %s already matches remote." % local_path)
-    #                 break
-    #         with open(local_path, 'wb') as fp:
-    #             file_.write_to(fp)
-
-    #         # only fetching one file so we are done
-    #         break
 
 @might_need_auth
 def list_(args):
@@ -274,6 +254,7 @@ def list_(args):
 
     project = osf.project(args.project)
     base_file_path = None
+    base_provider = None
     if args.base_path is not None:
         base_path = args.base_path
         if base_path.startswith('/'):
@@ -282,8 +263,6 @@ def list_(args):
         if not base_file_path.endswith('/'):
             base_file_path = base_file_path + '/'
         base_provider = base_path.split('/')[0]
-    else:
-        base_provider = None
 
     for store in project.storages:
         prefix = store.name
@@ -311,6 +290,7 @@ def list_(args):
                 print('%s %s %s' % (smodified, sfsize, full_path))
             else:
                 print(full_path)
+
 
 @might_need_auth
 def upload(args):
@@ -385,7 +365,7 @@ def makefolder(args):
     storage, remote_path = split_storage(args.target)
 
     store = project.storage(storage)
-    f = find_parent_folder(store, remote_path)
+    f = find_ancestral_folder(store, remote_path)
     if f is None:
         parent = store
         parent_path_segments = []
@@ -419,6 +399,7 @@ def remove(args):
     if f is None:
         sys.exit('No files found to remove.')
     f.remove()
+
 
 @might_need_auth
 def move(args):
@@ -469,6 +450,7 @@ def move(args):
     else:
         f.move_to(target_storage, target_folder,
                   to_filename=target_filename, force=args.force)
+
 
 def _ensure_folder(store, path):
     folder = find_by_path(store, path)
