@@ -10,7 +10,7 @@ from osfclient.cli import clone
 from osfclient.tests.mocks import MockProject
 from osfclient.tests.mocks import MockArgs
 
-def is_folder_mock(file_or_folder):
+def _is_folder_mock(file_or_folder):
     return file_or_folder._mock_name.startswith('Folder-')
 
 @patch.object(OSF, 'project', return_value=MockProject('1234'))
@@ -23,7 +23,7 @@ def test_clone_project(OSF_project):
     with patch('osfclient.cli.open', mock_open_func):
         with patch('osfclient.cli.makedirs'):
             with patch('osfclient.cli.os.getenv', side_effect='SECRET'):
-                with patch('osfclient.cli.is_folder', side_effect=is_folder_mock):
+                with patch('osfclient.cli.is_folder', side_effect=_is_folder_mock):
                     clone(args)
 
     OSF_project.assert_called_once_with('1234')
@@ -63,7 +63,7 @@ def test_clone_project_update_file_exists_and_matches(OSF_project, checksum):
         with patch('osfclient.cli.makedirs'):
             with patch('osfclient.cli.os.getenv', side_effect='SECRET'):
                 with patch('osfclient.cli.os.path.exists', side_effect=exists):
-                    with patch('osfclient.cli.is_folder', side_effect=is_folder_mock):
+                    with patch('osfclient.cli.is_folder', side_effect=_is_folder_mock):
                         clone(args)
 
     OSF_project.assert_called_once_with('1234')
@@ -106,7 +106,7 @@ def test_clone_project_update_file_exists_and_differs(OSF_project, checksum):
         with patch('osfclient.cli.makedirs'):
             with patch('osfclient.cli.os.getenv', side_effect='SECRET'):
                 with patch('osfclient.cli.os.path.exists', side_effect=exists):
-                    with patch('osfclient.cli.is_folder', side_effect=is_folder_mock):
+                    with patch('osfclient.cli.is_folder', side_effect=_is_folder_mock):
                         clone(args)
 
     OSF_project.assert_called_once_with('1234')
