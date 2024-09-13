@@ -148,6 +148,8 @@ def find_ancestral_folder(store, target_file_path):
         return None
     folder = store
     path = ''
+    i = 0
+    is_found = False
     for i in range(len(file_path_segs) - 1):
         path += file_path_segs[i]
         is_found = False
@@ -159,7 +161,7 @@ def find_ancestral_folder(store, target_file_path):
         if not is_found:
             break
         path += '/'
-    return folder
+    return folder if i > 0 or is_found else None
 
 
 def find_by_path(store, target_file_path):
