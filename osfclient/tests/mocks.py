@@ -1,5 +1,6 @@
 from mock import MagicMock, PropertyMock
 from ..utils import norm_remote_path
+import copy
 
 
 # When using a PropertyMock store it as an attribute
@@ -116,7 +117,7 @@ class FakeResponse:
         self._json = json
 
     def json(self):
-        return self._json
+        return copy.deepcopy(self._json)
     
 def is_folder_mock(file_or_folder):
     return file_or_folder._mock_name.startswith('Folder-')
