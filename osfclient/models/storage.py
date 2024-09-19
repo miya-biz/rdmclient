@@ -11,6 +11,8 @@ from ..utils import checksum
 from ..utils import file_empty
 from ..utils import get_local_file_size
 from ..utils import norm_remote_path
+from ..utils import flatten
+from ..utils import is_folder
 
 
 if six.PY2:
@@ -116,7 +118,9 @@ class Storage(OSFCore, ContainerMixin):
 
             else:
                 # find the upload URL for the file we are trying to update
-                for file_ in self.files:
+                for file_ in flatten(self):
+                    if is_folder(file_):
+                        continue
                     if norm_remote_path(file_.path) == path:
                         if not force:
                             if checksum(path) == file_.hashes.get('md5'):
